@@ -72,7 +72,7 @@ def train(config_path):
     albert_base_configuration = AlbertConfig(**config['model_params'])
     
     bert = AlbertModel(albert_base_configuration)
-    if config.get("gradient_checkpointing", False):
+    if config.get("gradient_checkpointing", False) and getattr(bert, "supports_gradient_checkpointing", False):
         bert.gradient_checkpointing_enable()
     bert = MultiTaskModel(bert, 
                           num_vocab=1 + max([m['token'] for m in token_maps.values()]), 
