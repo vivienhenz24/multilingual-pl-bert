@@ -37,6 +37,7 @@ CONDA_ENV_NAME="${CONDA_ENV_NAME:-plbert-py311}"
 
 export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-${REPO_ROOT}/.cache/huggingface}"
+export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-0}"
 
 mkdir -p "$RUN_DIR" "$HF_HOME"
 
