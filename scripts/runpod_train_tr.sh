@@ -65,13 +65,15 @@ esac
 echo "[2/6] Creating Python environment at ${VENV_DIR} with ${PYTHON_BIN}"
 $PYTHON_BIN -m venv "$VENV_DIR"
 source "${VENV_DIR}/bin/activate"
-python -m pip install --upgrade pip wheel setuptools
+PYTHON="${VENV_DIR}/bin/python"
+PIP="${PYTHON} -m pip"
+$PIP install --upgrade pip wheel setuptools
 
 echo "[3/6] Installing Python packages"
-if ! python -c "import torch" >/dev/null 2>&1; then
-  pip install torch torchvision torchaudio
+if ! $PYTHON -c "import torch" >/dev/null 2>&1; then
+  $PIP install torch torchvision torchaudio
 fi
-pip install \
+$PIP install \
   pandas \
   singleton-decorator \
   datasets \
@@ -84,9 +86,10 @@ pip install \
   pyyaml \
   tqdm \
   tensorboard
+$PYTHON -c "import yaml, torch; print('Python environment ready')"
 
 echo "[4/6] Generating run config at ${GENERATED_CONFIG}"
-python - "$BASE_CONFIG" "$GENERATED_CONFIG" "$DATA_DIR" "$LOG_DIR" "$BATCH_SIZE" "$NUM_STEPS" "$SAVE_INTERVAL" "$LOG_INTERVAL" "$MIXED_PRECISION" <<'PY'
+$PYTHON - "$BASE_CONFIG" "$GENERATED_CONFIG" "$DATA_DIR" "$LOG_DIR" "$BATCH_SIZE" "$NUM_STEPS" "$SAVE_INTERVAL" "$LOG_INTERVAL" "$MIXED_PRECISION" <<'PY'
 import sys
 import yaml
 
@@ -108,7 +111,7 @@ with open(output_config, "w", encoding="utf-8") as f:
 PY
 
 echo "[5/6] Preprocessing ${LANG_CODE} dataset"
-python preprocess_ml.py \
+$PYTHON preprocess_ml.py \
   --lang "$LANG_CODE" \
   --config_path "$GENERATED_CONFIG" \
   --root_directory "$SHARD_DIR" \
@@ -116,4 +119,4 @@ python preprocess_ml.py \
   --n_workers "$N_WORKERS"
 
 echo "[6/6] Starting training"
-python train.py --config_path "$GENERATED_CONFIG"
+$PYTHON train.py --config_path "$GENERATED_CONFIG"
