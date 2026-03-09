@@ -20,7 +20,8 @@ RUN_NAME="${RUN_NAME:-${LANG_CODE}-$(date +%Y%m%d-%H%M%S)}"
 VENV_DIR="${VENV_DIR:-.venv-runpod}"
 NUM_SHARDS="${NUM_SHARDS:-10}"
 N_WORKERS="${N_WORKERS:--1}"
-BATCH_SIZE="${BATCH_SIZE:-16}"
+PER_DEVICE_BATCH_SIZE="${PER_DEVICE_BATCH_SIZE:-16}"
+BATCH_SIZE="${BATCH_SIZE:-}"
 NUM_STEPS="${NUM_STEPS:-1000000}"
 SAVE_INTERVAL="${SAVE_INTERVAL:-5000}"
 LOG_INTERVAL="${LOG_INTERVAL:-10}"
@@ -43,6 +44,19 @@ export HF_HUB_ENABLE_HF_TRANSFER="${HF_HUB_ENABLE_HF_TRANSFER:-0}"
 export PYTORCH_CUDA_ALLOC_CONF="${PYTORCH_CUDA_ALLOC_CONF:-expandable_segments:True}"
 
 mkdir -p "$RUN_DIR" "$HF_HOME"
+
+if command -v nvidia-smi >/dev/null 2>&1; then
+  GPU_COUNT="$(nvidia-smi -L | wc -l | tr -d ' ')"
+else
+  GPU_COUNT=1
+fi
+if [[ -z "$GPU_COUNT" || "$GPU_COUNT" -lt 1 ]]; then
+  GPU_COUNT=1
+fi
+
+if [[ -z "$BATCH_SIZE" ]]; then
+  BATCH_SIZE="$((PER_DEVICE_BATCH_SIZE * GPU_COUNT))"
+fi
 
 echo "[1/6] Installing system packages"
 $SUDO apt-get update
@@ -134,6 +148,9 @@ with open(output_config, "w", encoding="utf-8") as f:
     yaml.safe_dump(config, f, sort_keys=False)
 PY
 
+echo "Detected ${GPU_COUNT} GPU(s)"
+echo "Using global batch size ${BATCH_SIZE} (${PER_DEVICE_BATCH_SIZE} per device target)"
+
 echo "[5/6] Preprocessing ${LANG_CODE} dataset"
 $PYTHON preprocess_ml.py \
   --lang "$LANG_CODE" \
@@ -143,4 +160,12 @@ $PYTHON preprocess_ml.py \
   --n_workers "$N_WORKERS"
 
 echo "[6/6] Starting training"
-$PYTHON train.py --config_path "$GENERATED_CONFIG"
+if [[ "$GPU_COUNT" -gt 1 ]]; then
+  "$PYTHON" -m accelerate.commands.launch \
+    --num_processes "$GPU_COUNT" \
+    --num_machines 1 \
+    --mixed_precision "$MIXED_PRECISION" \
+    train.py --config_path "$GENERATED_CONFIG"
+else
+  "$PYTHON" train.py --config_path "$GENERATED_CONFIG"
+fi
