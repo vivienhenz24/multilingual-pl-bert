@@ -32,6 +32,8 @@ DATA_DIR="${DATA_DIR:-${RUN_DIR}/multilingual-phonemes.processed}"
 SHARD_DIR="${SHARD_DIR:-${RUN_DIR}/shards}"
 LOG_DIR="${LOG_DIR:-${RUN_DIR}/checkpoints}"
 GENERATED_CONFIG="${GENERATED_CONFIG:-${RUN_DIR}/config_ml.yml}"
+CONDA_DIR="${CONDA_DIR:-${REPO_ROOT}/.miniconda}"
+CONDA_ENV_NAME="${CONDA_ENV_NAME:-plbert-py311}"
 
 export PYTHONUNBUFFERED=1
 export HF_HOME="${HF_HOME:-${REPO_ROOT}/.cache/huggingface}"
@@ -57,17 +59,33 @@ case "$PYTHON_VERSION" in
   3.10|3.11) ;;
   *)
     echo "Unsupported Python version: ${PYTHON_VERSION}" >&2
-    echo "This repo currently needs Python 3.10 or 3.11 because transformers<4.33.3 depends on tokenizers builds that are not reliable on Python 3.12." >&2
-    exit 1
+    echo "Falling back to Miniconda-managed Python 3.11." >&2
+    PYTHON_BIN=""
     ;;
 esac
 
-echo "[2/6] Creating Python environment at ${VENV_DIR} with ${PYTHON_BIN}"
-$PYTHON_BIN -m venv "$VENV_DIR"
-source "${VENV_DIR}/bin/activate"
-PYTHON="${VENV_DIR}/bin/python"
-PIP="${PYTHON} -m pip"
-$PIP install --upgrade pip wheel setuptools
+if [[ -n "$PYTHON_BIN" ]]; then
+  echo "[2/6] Creating Python environment at ${VENV_DIR} with ${PYTHON_BIN}"
+  $PYTHON_BIN -m venv "$VENV_DIR"
+  source "${VENV_DIR}/bin/activate"
+  PYTHON="${VENV_DIR}/bin/python"
+  PIP="${PYTHON} -m pip"
+  $PIP install --upgrade pip wheel setuptools
+else
+  echo "[2/6] Installing Miniconda at ${CONDA_DIR}"
+  if [[ ! -x "${CONDA_DIR}/bin/conda" ]]; then
+    INSTALLER="/tmp/miniconda.sh"
+    curl -fsSL https://repo.anaconda.com/miniconda/Miniconda3-latest-Linux-x86_64.sh -o "$INSTALLER"
+    bash "$INSTALLER" -b -p "$CONDA_DIR"
+  fi
+  CONDA_BIN="${CONDA_DIR}/bin/conda"
+  if [[ ! -x "${CONDA_DIR}/envs/${CONDA_ENV_NAME}/bin/python" ]]; then
+    "$CONDA_BIN" create -y -n "$CONDA_ENV_NAME" python=3.11 pip
+  fi
+  PYTHON="${CONDA_DIR}/envs/${CONDA_ENV_NAME}/bin/python"
+  PIP="${PYTHON} -m pip"
+  $PIP install --upgrade pip wheel setuptools
+fi
 
 echo "[3/6] Installing Python packages"
 if ! $PYTHON -c "import torch" >/dev/null 2>&1; then
