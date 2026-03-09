@@ -41,9 +41,29 @@ mkdir -p "$RUN_DIR" "$HF_HOME"
 echo "[1/6] Installing system packages"
 $SUDO apt-get update
 $SUDO apt-get install -y git espeak-ng python3-venv
+$SUDO apt-get install -y python3.11 python3.11-venv || true
+$SUDO apt-get install -y python3.10 python3.10-venv || true
 
-echo "[2/6] Creating Python environment at ${VENV_DIR}"
-python3 -m venv "$VENV_DIR"
+if command -v python3.10 >/dev/null 2>&1; then
+  PYTHON_BIN="python3.10"
+elif command -v python3.11 >/dev/null 2>&1; then
+  PYTHON_BIN="python3.11"
+else
+  PYTHON_BIN="python3"
+fi
+
+PYTHON_VERSION="$($PYTHON_BIN -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')"
+case "$PYTHON_VERSION" in
+  3.10|3.11) ;;
+  *)
+    echo "Unsupported Python version: ${PYTHON_VERSION}" >&2
+    echo "This repo currently needs Python 3.10 or 3.11 because transformers<4.33.3 depends on tokenizers builds that are not reliable on Python 3.12." >&2
+    exit 1
+    ;;
+esac
+
+echo "[2/6] Creating Python environment at ${VENV_DIR} with ${PYTHON_BIN}"
+$PYTHON_BIN -m venv "$VENV_DIR"
 source "${VENV_DIR}/bin/activate"
 python -m pip install --upgrade pip wheel setuptools
 
