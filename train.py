@@ -1,3 +1,4 @@
+import argparse
 import os
 
 import shutil
@@ -10,15 +11,13 @@ import torch.nn.functional as F
 from accelerate import Accelerator
 from accelerate.utils import LoggerType
 
-from transformers import AdamW
+from torch.optim import AdamW
 from transformers import AlbertConfig, AlbertModel
 from accelerate import DistributedDataParallelKwargs
 
 from model import MultiTaskModel
 from dataloader import build_dataloader
 from utils import length_to_mask, scan_checkpoint
-
-from utils import get_phoneme_dataset
 
 from torch.utils.tensorboard import SummaryWriter
 
@@ -28,8 +27,13 @@ import yaml
 import pickle
 
 
-def train():
-    config_path = "Configs/config.yml" # you can change it to anything else
+def parse_args():
+    parser = argparse.ArgumentParser(description="Train multilingual PL-BERT.")
+    parser.add_argument("--config_path", default="Configs/config_ml.yml", help="Path to the training config.")
+    return parser.parse_args()
+
+
+def train(config_path):
     config = yaml.safe_load(open(config_path))
 
     with open(config['dataset_params']['token_maps'], 'rb') as handle:
@@ -52,8 +56,8 @@ def train():
     
     curr_steps = 0
     
-    # dataset = get_phoneme_dataset('phonemes', tokenizer)
-    dataset = pickle.load(open('phonemes/dataset.pkl', 'rb'))
+    from datasets import load_from_disk
+    dataset = load_from_disk(config['data_folder'])
 
     log_dir = config['log_dir']
     if not osp.exists(log_dir): os.makedirs(log_dir, exist_ok=True)
@@ -116,7 +120,7 @@ def train():
         for _, batch in enumerate(train_loader):        
             curr_steps += 1
             
-            words, labels, languages, phonemes, input_lengths, masked_indices = batch
+            words, labels, phonemes, input_lengths, masked_indices = batch
             text_mask = length_to_mask(torch.Tensor(input_lengths)).to(phonemes.device)
             
             tokens_pred, words_pred = bert(phonemes, attention_mask=(~text_mask).int())
@@ -167,4 +171,5 @@ def train():
                 return 
         
 if __name__ == '__main__':
-    train()
+    args = parse_args()
+    train(args.config_path)

@@ -66,8 +66,10 @@ class FilePathDataset(torch.utils.data.Dataset):
         masked_index = []
         for z in zip(phonemes, input_ids):
             z = list(z)
-            
-            words.extend([z[1]] * len(z[0]))
+            if not z[0] or (isinstance(z[1], list) and len(z[1]) == 0):
+                continue
+            word_id = z[1][0] if isinstance(z[1], list) else z[1]
+            words.extend([word_id] * len(z[0]))
             words.append(self.word_separator)
             labels += z[0] + " "
 

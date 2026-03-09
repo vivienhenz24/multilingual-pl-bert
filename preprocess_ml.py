@@ -21,28 +21,36 @@ def parse_args():
     parser.add_argument("--root_directory", type=str, default="./multilingual-phonemes", help="Root directory for processed data.")
     parser.add_argument("--num_shards", type=int, default=10, help="Number of shards to split the dataset.")
     parser.add_argument("--n_workers", type=int, default=-1, help="Workers on CPU cores")
+    parser.add_argument("--lang", type=str, default="tr", help="Language code for espeak-ng and dataset (e.g. 'tr' for Turkish, 'sv' for Swedish).")
     return parser.parse_args()
 
 def load_config(config_path):
     with open(config_path, 'r') as file:
         return yaml.safe_load(file)
 
-def initialize_components(config, lang='sv'): #lang='en-us'):
-    # Check languages at: https://github.com/espeak-ng/espeak-ng/blob/master/docs/languages.md
-
-    global_phonemizer = phonemizer.backend.EspeakBackend(language=lang,
-                                                         preserve_punctuation=True, 
-                                                         with_stress=True, 
-                                                         punctuation_marks =string.punctuation,
-                                                         words_mismatch='ignore',
-                                                        language_switch='remove-flags')        
-    #tokenizer = BertTokenizer.from_pretrained(config['dataset_params']['tokenizer'])
-    #tokenizer = BertTokenizer.from_pretrained(config['dataset_params']['tokenizer'])
+def initialize_components(config, lang='tr'):
     tokenizer = BertTokenizer.from_pretrained('bert-base-multilingual-cased')
-    
+
+    # Try pre-processed dataset first (already has input_ids + phonemes, no espeak needed)
+    try:
+        dataset = load_dataset("styletts2-community/multilingual-pl-bert", data_dir=lang, split='train')
+        print(f"Loaded pre-processed dataset for '{lang}' from styletts2-community/multilingual-pl-bert")
+        return None, tokenizer, dataset, True
+    except Exception:
+        pass
+
+    # Fall back to raw text dataset that needs phonemization via espeak
+    # Check languages at: https://github.com/espeak-ng/espeak-ng/blob/master/docs/languages.md
+    global_phonemizer = phonemizer.backend.EspeakBackend(language=lang,
+                                                         preserve_punctuation=True,
+                                                         with_stress=True,
+                                                         punctuation_marks=string.punctuation,
+                                                         words_mismatch='ignore',
+                                                         language_switch='remove-flags')
     # https://huggingface.co/datasets/styletts2-community/multilingual-phonemes-10k-alpha
-    dataset = load_dataset("styletts2-community/multilingual-phonemes-10k-alpha", "sv")['train']
-    return global_phonemizer, tokenizer, dataset
+    dataset = load_dataset("styletts2-community/multilingual-phonemes-10k-alpha", lang)['train']
+    print(f"Loaded raw dataset for '{lang}' from styletts2-community/multilingual-phonemes-10k-alpha")
+    return global_phonemizer, tokenizer, dataset, False
 
 def process_shard(i, args, dataset, global_phonemizer, tokenizer):
     directory = os.path.join(args.root_directory, "shard_" + str(i))
@@ -93,9 +101,14 @@ if __name__ == "__main__":
     print("Loading config...")
     config = load_config(args.config_path)
     print("Initialize components...")
-    global_phonemizer, tokenizer, dataset = initialize_components(config)
-    print("Processing dataset...")
-    process_dataset(args, dataset, global_phonemizer, tokenizer)
-    print("Combining shards...")
-    final_dataset = combine_shards(args, config)
+    global_phonemizer, tokenizer, dataset, is_preprocessed = initialize_components(config, lang=args.lang)
+    if is_preprocessed:
+        print("Dataset is already pre-processed. Saving directly to disk...")
+        dataset.save_to_disk(config['data_folder'])
+        print(f"Dataset saved to {config['data_folder']}")
+    else:
+        print("Processing dataset...")
+        process_dataset(args, dataset, global_phonemizer, tokenizer)
+        print("Combining shards...")
+        combine_shards(args, config)
     # Further processing can be done here
