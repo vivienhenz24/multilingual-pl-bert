@@ -20,11 +20,13 @@ RUN_NAME="${RUN_NAME:-${LANG_CODE}-$(date +%Y%m%d-%H%M%S)}"
 VENV_DIR="${VENV_DIR:-.venv-runpod}"
 NUM_SHARDS="${NUM_SHARDS:-10}"
 N_WORKERS="${N_WORKERS:--1}"
-BATCH_SIZE="${BATCH_SIZE:-64}"
+BATCH_SIZE="${BATCH_SIZE:-16}"
 NUM_STEPS="${NUM_STEPS:-1000000}"
 SAVE_INTERVAL="${SAVE_INTERVAL:-5000}"
 LOG_INTERVAL="${LOG_INTERVAL:-10}"
 MIXED_PRECISION="${MIXED_PRECISION:-fp16}"
+MAX_MEL_LENGTH="${MAX_MEL_LENGTH:-384}"
+GRADIENT_CHECKPOINTING="${GRADIENT_CHECKPOINTING:-true}"
 BASE_CONFIG="${BASE_CONFIG:-Configs/config_ml.yml}"
 
 RUN_DIR="${RUN_DIR:-runs/${RUN_NAME}}"
@@ -109,11 +111,11 @@ $PIP install \
 $PYTHON -c "import yaml, torch; print('Python environment ready')"
 
 echo "[4/6] Generating run config at ${GENERATED_CONFIG}"
-$PYTHON - "$BASE_CONFIG" "$GENERATED_CONFIG" "$DATA_DIR" "$LOG_DIR" "$BATCH_SIZE" "$NUM_STEPS" "$SAVE_INTERVAL" "$LOG_INTERVAL" "$MIXED_PRECISION" <<'PY'
+$PYTHON - "$BASE_CONFIG" "$GENERATED_CONFIG" "$DATA_DIR" "$LOG_DIR" "$BATCH_SIZE" "$NUM_STEPS" "$SAVE_INTERVAL" "$LOG_INTERVAL" "$MIXED_PRECISION" "$MAX_MEL_LENGTH" "$GRADIENT_CHECKPOINTING" <<'PY'
 import sys
 import yaml
 
-base_config, output_config, data_dir, log_dir, batch_size, num_steps, save_interval, log_interval, mixed_precision = sys.argv[1:]
+base_config, output_config, data_dir, log_dir, batch_size, num_steps, save_interval, log_interval, mixed_precision, max_mel_length, gradient_checkpointing = sys.argv[1:]
 
 with open(base_config, "r", encoding="utf-8") as f:
     config = yaml.safe_load(f)
@@ -125,6 +127,8 @@ config["num_steps"] = int(num_steps)
 config["save_interval"] = int(save_interval)
 config["log_interval"] = int(log_interval)
 config["mixed_precision"] = mixed_precision
+config["gradient_checkpointing"] = gradient_checkpointing.lower() == "true"
+config["dataset_params"]["max_mel_length"] = int(max_mel_length)
 
 with open(output_config, "w", encoding="utf-8") as f:
     yaml.safe_dump(config, f, sort_keys=False)
