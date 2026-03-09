@@ -16,7 +16,7 @@ if ! command -v apt-get >/dev/null 2>&1; then
 fi
 
 LANG_CODE="${LANG_CODE:-tr}"
-RUN_NAME="${RUN_NAME:-${LANG_CODE}-$(date +%Y%m%d-%H%M%S)}"
+RUN_NAME="${RUN_NAME:-turkish-h100}"
 VENV_DIR="${VENV_DIR:-.venv-runpod}"
 NUM_SHARDS="${NUM_SHARDS:-10}"
 N_WORKERS="${N_WORKERS:--1}"
